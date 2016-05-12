@@ -29,6 +29,7 @@ const (
 	ExitStatusFile = "exitStatus"
 	StateFile      = "state.json"
 	ControlFile    = "control"
+	OOMSyncFile    = "oom-sync"
 	InitProcessID  = "init"
 )
 
@@ -75,15 +76,16 @@ const (
 )
 
 type state struct {
-	Bundle      string   `json:"bundle"`
-	Labels      []string `json:"labels"`
-	Stdin       string   `json:"stdin"`
-	Stdout      string   `json:"stdout"`
-	Stderr      string   `json:"stderr"`
-	Runtime     string   `json:"runtime"`
-	RuntimeArgs []string `json:"runtimeArgs"`
-	Shim        string   `json:"shim"`
-	NoPivotRoot bool     `json:"noPivotRoot"`
+	Bundle           string   `json:"bundle"`
+	Labels           []string `json:"labels"`
+	Stdin            string   `json:"stdin"`
+	Stdout           string   `json:"stdout"`
+	Stderr           string   `json:"stderr"`
+	Runtime          string   `json:"runtime"`
+	RuntimeArgs      []string `json:"runtimeArgs"`
+	Shim             string   `json:"shim"`
+	NoPivotRoot      bool     `json:"noPivotRoot"`
+	CgroupMemoryPath string   `json:"cgroupMemoryPath"`
 }
 
 type ProcessState struct {

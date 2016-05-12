@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -155,6 +156,9 @@ func (p *process) start() error {
 		if p.state.NoPivotRoot {
 			args = append(args, "--no-pivot")
 		}
+	}
+	if len(flag.Args()) > 3 {
+		args = append(args, flag.Args()[3:]...)
 	}
 	args = append(args,
 		"-d",

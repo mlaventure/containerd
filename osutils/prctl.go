@@ -41,3 +41,10 @@ func SetSubreaper(i int) error {
 	}
 	return nil
 }
+
+func SetPdeathsig(s syscall.Signal) error {
+	if _, _, err := syscall.RawSyscall(syscall.SYS_PRCTL, syscall.PR_SET_PDEATHSIG, uintptr(s), 0); err != 0 {
+		return err
+	}
+	return nil
+}

@@ -56,10 +56,10 @@ func (m *Monitor) Monitor(p runtime.Process) error {
 	return nil
 }
 
-func (m *Monitor) MonitorOOM(c runtime.Container) error {
+func (m *Monitor) MonitorOOM(c runtime.Container, p runtime.Process) error {
 	m.m.Lock()
 	defer m.m.Unlock()
-	o, err := c.OOM()
+	o, err := c.OOM(p)
 	if err != nil {
 		return err
 	}

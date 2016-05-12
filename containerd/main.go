@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -120,6 +122,10 @@ func main() {
 		return nil
 	}
 
+	app.Commands = []cli.Command{
+		oomSyncCommand,
+	}
+
 	app.Action = func(context *cli.Context) {
 		if err := daemon(context); err != nil {
 			logrus.Fatal(err)
@@ -128,6 +134,39 @@ func main() {
 	if err := app.Run(os.Args); err != nil {
 		logrus.Fatal(err)
 	}
+}
+
+// HookState is the payload provided to a hook on execution.
+type HookState struct {
+	Version     string            `json:"version"`
+	ID          string            `json:"id"`
+	Pid         int               `json:"pid"`
+	Root        string            `json:"root"`
+	CgroupPaths map[string]string `json:"cgroup_paths"`
+}
+
+var oomSyncCommand = cli.Command{
+	Name:  "oom-sync",
+	Usage: "<pipe>",
+	Action: func(ctx *cli.Context) {
+		var hs HookState
+
+		osutils.SetPdeathsig(syscall.SIGKILL)
+
+		if !ctx.Args().Present() {
+			os.Exit(1)
+		}
+
+		if err := json.NewDecoder(os.Stdin).Decode(&hs); err != nil {
+			os.Exit(2)
+		}
+
+		if err := ioutil.WriteFile(ctx.Args().First(), []byte(hs.CgroupPaths["memory"]), 0755); err != nil {
+			os.Exit(3)
+		}
+
+		os.Exit(0)
+	},
 }
 
 func daemon(context *cli.Context) error {

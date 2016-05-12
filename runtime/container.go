@@ -25,11 +25,13 @@ type Container interface {
 	// Path returns the path to the bundle
 	Path() string
 	// Start starts the init process of the container
-	Start(checkpoint string, s Stdio) (Process, error)
+	Start(chikpoint string, s Stdio) (Process, error)
 	// Exec starts another process in an existing container
 	Exec(string, specs.ProcessSpec, Stdio) (Process, error)
 	// Delete removes the container's state and any resources
 	Delete() error
+	// InitProcess returns the container init process
+	InitProcess() (Process, error)
 	// Processes returns all the containers processes that have been added
 	Processes() ([]Process, error)
 	// State returns the containers runtime state
@@ -55,7 +57,7 @@ type Container interface {
 	// Name or path of the OCI compliant runtime used to execute the container
 	Runtime() string
 	// OOM signals the channel if the container received an OOM notification
-	OOM() (OOM, error)
+	OOM(Process) (OOM, error)
 	// UpdateResource updates the containers resources to new values
 	UpdateResources(*Resource) error
 
@@ -150,16 +152,17 @@ func Load(root, id string, timeout time.Duration) (Container, error) {
 		return nil, err
 	}
 	c := &container{
-		root:        root,
-		id:          id,
-		bundle:      s.Bundle,
-		labels:      s.Labels,
-		runtime:     s.Runtime,
-		runtimeArgs: s.RuntimeArgs,
-		shim:        s.Shim,
-		noPivotRoot: s.NoPivotRoot,
-		processes:   make(map[string]*process),
-		timeout:     timeout,
+		root:             root,
+		id:               id,
+		bundle:           s.Bundle,
+		labels:           s.Labels,
+		runtime:          s.Runtime,
+		runtimeArgs:      s.RuntimeArgs,
+		shim:             s.Shim,
+		noPivotRoot:      s.NoPivotRoot,
+		cgroupMemoryPath: s.CgroupMemoryPath,
+		processes:        make(map[string]*process),
+		timeout:          timeout,
 	}
 	dirs, err := ioutil.ReadDir(filepath.Join(root, id))
 	if err != nil {
@@ -199,17 +202,18 @@ func readProcessState(dir string) (*ProcessState, error) {
 
 type container struct {
 	// path to store runtime state information
-	root        string
-	id          string
-	bundle      string
-	runtime     string
-	runtimeArgs []string
-	shim        string
-	processes   map[string]*process
-	labels      []string
-	oomFds      []int
-	noPivotRoot bool
-	timeout     time.Duration
+	root             string
+	id               string
+	bundle           string
+	runtime          string
+	runtimeArgs      []string
+	shim             string
+	processes        map[string]*process
+	labels           []string
+	oomSyncPipe      string
+	cgroupMemoryPath string
+	noPivotRoot      bool
+	timeout          time.Duration
 }
 
 func (c *container) ID() string {
@@ -222,6 +226,26 @@ func (c *container) Path() string {
 
 func (c *container) Labels() []string {
 	return c.labels
+}
+
+func (c *container) updateStateFile() error {
+	f, err := os.OpenFile(filepath.Join(c.root, c.id, StateFile), os.O_WRONLY|os.O_TRUNC, 0666)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if err := json.NewEncoder(f).Encode(state{
+		Bundle:           c.bundle,
+		Labels:           c.labels,
+		Runtime:          c.runtime,
+		RuntimeArgs:      c.runtimeArgs,
+		Shim:             c.shim,
+		CgroupMemoryPath: c.cgroupMemoryPath,
+		NoPivotRoot:      c.noPivotRoot,
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *container) readSpec() (*specs.Spec, error) {
@@ -246,6 +270,13 @@ func (c *container) Delete() error {
 		err = derr
 	}
 	return err
+}
+
+func (c *container) InitProcess() (Process, error) {
+	if p, ok := c.processes["init"]; ok {
+		return p, nil
+	}
+	return nil, fmt.Errorf("no init process found")
 }
 
 func (c *container) Processes() ([]Process, error) {
@@ -429,13 +460,7 @@ func (c *container) Start(checkpoint string, s Stdio) (Process, error) {
 	if err := os.Mkdir(processRoot, 0755); err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(c.shim,
-		c.id, c.bundle, c.runtime,
-	)
-	cmd.Dir = processRoot
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid: true,
-	}
+
 	spec, err := c.readSpec()
 	if err != nil {
 		return nil, err
@@ -452,6 +477,29 @@ func (c *container) Start(checkpoint string, s Stdio) (Process, error) {
 	p, err := newProcess(config)
 	if err != nil {
 		return nil, err
+	}
+
+	// Get our own path for the pre-start hook
+	path, err := os.Readlink("/proc/self/exe")
+	if err != nil {
+		return nil, err
+	}
+
+	oom := filepath.Join(filepath.Join(c.root, c.id), OOMSyncFile)
+	if err := syscall.Mkfifo(oom, 0755); err != nil && !os.IsExist(err) {
+		return nil, err
+	}
+	c.oomSyncPipe = oom
+
+	cmd := exec.Command(c.shim,
+		c.id, c.bundle, c.runtime,
+		"--prestart-hook", path,
+		"--prestart-hook-args", "oom-sync",
+		"--prestart-hook-args", oom,
+	)
+	cmd.Dir = processRoot
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
 	}
 	if err := c.startCmd(InitProcessID, cmd, p); err != nil {
 		return nil, err
@@ -509,6 +557,41 @@ func (c *container) startCmd(pid string, cmd *exec.Cmd, p *process) error {
 		}
 		return err
 	}
+
+	if c.cgroupMemoryPath == "" && pid == "init" {
+		sync := make(chan error)
+
+		go func() {
+			var err error
+
+			defer func() {
+				sync <- err
+			}()
+			oomf, err := os.Open(c.oomSyncPipe)
+			if err != nil {
+				return
+			}
+			defer oomf.Close()
+			b, err := ioutil.ReadAll(oomf)
+			if err != nil {
+				return
+			}
+			c.cgroupMemoryPath = string(b)
+			err = c.updateStateFile()
+		}()
+
+		select {
+		case err := <-sync:
+			if err != nil {
+				return err
+			}
+		case <-time.After(100 * time.Millisecond):
+			cmd.Process.Kill()
+			cmd.Wait()
+			return fmt.Errorf("timeout while retrieving memory cgroup path")
+		}
+	}
+
 	if err := c.waitForStart(p, cmd); err != nil {
 		return err
 	}
@@ -575,24 +658,8 @@ func (c *container) Stats() (*Stat, error) {
 	return s.Data, nil
 }
 
-func (c *container) OOM() (OOM, error) {
-	container, err := c.getLibctContainer()
-	if err != nil {
-		if lerr, ok := err.(libcontainer.Error); ok {
-			// with oom registration sometimes the container can run, exit, and be destroyed
-			// faster than we can get the state back so we can just ignore this
-			if lerr.Code() == libcontainer.ContainerNotExists {
-				return nil, ErrContainerExited
-			}
-		}
-		return nil, err
-	}
-	state, err := container.State()
-	if err != nil {
-		return nil, err
-	}
-	memoryPath := state.CgroupPaths["memory"]
-	return c.getMemeoryEventFD(memoryPath)
+func (c *container) OOM(p Process) (OOM, error) {
+	return c.getMemoryEventFD()
 }
 
 // Status implements the runtime Container interface.
@@ -615,23 +682,24 @@ func (c *container) Status() (State, error) {
 	return s.Status, nil
 }
 
-func (c *container) getMemeoryEventFD(root string) (*oom, error) {
-	f, err := os.Open(filepath.Join(root, "memory.oom_control"))
+func (c *container) getMemoryEventFD() (*oom, error) {
+	f, err := os.Open(filepath.Join(c.cgroupMemoryPath, "memory.oom_control"))
 	if err != nil {
 		return nil, err
 	}
+
 	fd, _, serr := syscall.RawSyscall(syscall.SYS_EVENTFD2, 0, syscall.FD_CLOEXEC, 0)
 	if serr != 0 {
 		f.Close()
 		return nil, serr
 	}
-	if err := c.writeEventFD(root, int(f.Fd()), int(fd)); err != nil {
+	if err := c.writeEventFD(c.cgroupMemoryPath, int(f.Fd()), int(fd)); err != nil {
 		syscall.Close(int(fd))
 		f.Close()
 		return nil, err
 	}
 	return &oom{
-		root:    root,
+		root:    c.cgroupMemoryPath,
 		id:      c.id,
 		eventfd: int(fd),
 		control: f,
