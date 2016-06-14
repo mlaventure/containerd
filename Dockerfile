@@ -55,10 +55,10 @@ RUN set -x \
 	&& rm -rf "$SECCOMP_PATH"
 
 # Install runc
-ENV RUNC_COMMIT 85873d917e86676e44ccb80719fcb47a794676a1
+ENV RUNC_COMMIT 01f1d932eaa1836b242fe1a61e5cfa5a6286886b
 RUN set -x \
 	&& export GOPATH="$(mktemp -d)" \
-    && git clone git://github.com/opencontainers/runc.git "$GOPATH/src/github.com/opencontainers/runc" \
+    && git clone git://github.com/crosbymichael/runc.git "$GOPATH/src/github.com/opencontainers/runc" \
 	&& cd "$GOPATH/src/github.com/opencontainers/runc" \
 	&& git checkout -q "$RUNC_COMMIT" \
 	&& make BUILDTAGS="seccomp apparmor selinux" && make install
