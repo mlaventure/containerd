@@ -185,7 +185,7 @@ func Load(root, id, shimName string, timeout time.Duration) (Container, error) {
 		}
 		p, err := loadProcess(filepath.Join(root, id, pid), pid, c, s)
 		if err != nil {
-			logrus.WithField("id", id).WithField("pid", pid).Debug("containerd: error loading process %s", err)
+			logrus.WithField("id", id).WithField("pid", pid).Debugf("containerd: error loading process %s", err)
 			continue
 		}
 		c.processes[pid] = p

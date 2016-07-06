@@ -109,6 +109,7 @@ func eventLogger(s *Supervisor, path string, events chan Event, retainCount int)
 					}
 				}
 			}
+			logrus.Debugf("<containerd>: Logging new event %v\n", e)
 			s.eventLock.Lock()
 			s.eventLog = append(s.eventLog, e)
 			s.eventLock.Unlock()
@@ -156,14 +157,15 @@ type Supervisor struct {
 	startTasks  chan *startTask
 	// we need a lock around the subscribers map only because additions and deletions from
 	// the map are via the API so we cannot really control the concurrency
-	subscriberLock sync.RWMutex
-	subscribers    map[chan Event]struct{}
-	machine        Machine
-	tasks          chan Task
-	monitor        *Monitor
-	eventLog       []Event
-	eventLock      sync.Mutex
-	timeout        time.Duration
+	subscriberLock  sync.RWMutex
+	subscribers     map[chan Event]struct{}
+	machine         Machine
+	tasks           chan Task
+	monitor         *Monitor
+	eventLog        []Event
+	eventLock       sync.Mutex
+	timeout         time.Duration
+	exitedProcesses []runtime.Process
 }
 
 // Stop closes all startTasks and sends a SIGTERM to each container's pid1 then waits for they to
@@ -198,15 +200,18 @@ func (s *Supervisor) Events(from time.Time) chan Event {
 	EventSubscriberCounter.Inc(1)
 	s.subscribers[c] = struct{}{}
 	if !from.IsZero() {
+		logrus.Debugf("<containerd>: looking events from %v", from)
 		// replay old event
 		s.eventLock.Lock()
 		past := s.eventLog[:]
 		s.eventLock.Unlock()
 		for _, e := range past {
 			if e.Timestamp.After(from) {
+				logrus.Debugf("<containerd>: Sending previous event %v", e)
 				c <- e
 			}
 		}
+		logrus.Debugf("<containerd>: DONE looking events from %v", from)
 		// Notify the client that from now on it's live events
 		c <- Event{
 			Type:      StateLive,
@@ -247,6 +252,7 @@ func (s *Supervisor) notifySubscribers(e Event) {
 // therefore it is save to do operations in the handlers that modify state of the system or
 // state of the Supervisor
 func (s *Supervisor) Start() error {
+	c := make(chan struct{})
 	logrus.WithFields(logrus.Fields{
 		"stateDir":    s.stateDir,
 		"runtime":     s.runtime,
@@ -254,11 +260,35 @@ func (s *Supervisor) Start() error {
 		"memory":      s.machine.Memory,
 		"cpus":        s.machine.Cpus,
 	}).Debug("containerd: supervisor running")
+	if len(s.exitedProcesses) > 0 {
+		go func() {
+			logrus.WithField("dead processes", s.exitedProcesses).
+				Debug("containerd: waiting for restored process deaths to be processed")
+			events := s.Events(time.Time{})
+			count := len(s.exitedProcesses)
+			for e := range events {
+				if e.Type == StateExit {
+					count--
+				}
+
+				if count == 0 {
+					break
+				}
+			}
+			s.exitedProcesses = nil
+			s.Unsubscribe(events)
+			logrus.Debug("containerd: done logging passed deaths")
+			close(c)
+		}()
+	} else {
+		close(c)
+	}
 	go func() {
 		for i := range s.tasks {
 			s.handleTask(i)
 		}
 	}()
+	<-c
 	return nil
 }
 
@@ -326,11 +356,13 @@ func (s *Supervisor) restore() error {
 		logrus.WithField("id", id).Debug("containerd: container restored")
 		var exitedProcesses []runtime.Process
 		for _, p := range processes {
+			logrus.Debugf("<<containerd>>: checking if %#v is alive", p)
 			if p.State() == runtime.Running {
 				if err := s.monitorProcess(p); err != nil {
 					return err
 				}
 			} else {
+				logrus.Debugf("<<containerd>>: adding %#v to exitedProcesses", p)
 				exitedProcesses = append(exitedProcesses, p)
 			}
 		}
@@ -344,6 +376,8 @@ func (s *Supervisor) restore() error {
 				}
 				s.SendTask(e)
 			}
+			s.exitedProcesses = exitedProcesses
+			logrus.WithField("adding dead processes", exitedProcesses).Debugf("Processes to wait for: %#v", exitedProcesses)
 		}
 	}
 	return nil
