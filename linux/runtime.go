@@ -91,7 +91,7 @@ func (r *Runtime) Create(ctx context.Context, id string, opts plugin.CreateOpts)
 	if err != nil {
 		return nil, err
 	}
-	s, err := newShim(r.shim, path, r.remote)
+	s, err := newShim(id, r.shim, path, r.remote)
 	if err != nil {
 		os.RemoveAll(path)
 		return nil, err
@@ -150,6 +150,8 @@ func (r *Runtime) Delete(ctx context.Context, c plugin.Task) (*plugin.Exit, erro
 		return nil, err
 	}
 	lc.shim.Exit(ctx, &shim.ExitRequest{})
+	// TODO: wait for shim to exit here to ensure that we don't hold on any
+	// mounts by the time this has returned
 	return &plugin.Exit{
 		Status:    rsp.ExitStatus,
 		Timestamp: rsp.ExitedAt,

@@ -12,6 +12,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Sirupsen/logrus"
+	google_protobuf1 "github.com/golang/protobuf/ptypes/empty"
+	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/grpclog"
 
@@ -22,7 +25,24 @@ import (
 	"github.com/pkg/errors"
 )
 
-func newShim(shimName string, path string, remote bool) (shim.ShimClient, error) {
+type linuxShim struct {
+	shim.ShimClient
+
+	cmd *exec.Cmd
+}
+
+func (ls linuxShim) Exit(ctx context.Context, in *shim.ExitRequest, opts ...grpc.CallOption) (*google_protobuf1.Empty, error) {
+	e, err := ls.ShimClient.Exit(ctx, in, opts...)
+	if err != nil {
+		return e, err
+	}
+
+	reaper.Default.Wait(ls.cmd)
+
+	return e, err
+}
+
+func newShim(id, shimName string, path string, remote bool) (shim.ShimClient, error) {
 	if !remote {
 		return localShim.Client(path)
 	}
@@ -51,10 +71,19 @@ func newShim(shimName string, path string, remote bool) (shim.ShimClient, error)
 	if err := reaper.Default.Start(cmd); err != nil {
 		return nil, errors.Wrapf(err, "failed to start shim")
 	}
+	logrus.Debugf("newShim: pid: %v, id: %v", cmd.Process.Pid, id)
 	if err := sys.SetOOMScore(cmd.Process.Pid, sys.OOMScoreMaxKillable); err != nil {
 		return nil, err
 	}
 	return connectShim(socket)
+	// sc, err := connectShim(socket)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// return linuxShim{
+	// 	ShimClient: sc,
+	// 	cmd:        cmd,
+	// }, nil
 }
 
 func loadShim(path string, remote bool) (shim.ShimClient, error) {
@@ -74,7 +103,6 @@ func connectShim(socket string) (shim.ShimClient, error) {
 			return net.DialTimeout("unix", socket, timeout)
 		}),
 		grpc.WithBlock(),
-		grpc.WithTimeout(2*time.Second),
 	)
 	conn, err := grpc.Dial(fmt.Sprintf("unix://%s", socket), dialOpts...)
 	if err != nil {
