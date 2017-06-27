@@ -86,10 +86,16 @@ func newInitProcess(context context.Context, path, namespace string, r *shimapi.
 		io     runc.IO
 	)
 	if r.Terminal {
-		if socket, err = runc.NewConsoleSocket(filepath.Join(path, "pty.sock")); err != nil {
+		sockDir := filepath.Join(os.TempDir(), fmt.Sprintf("containerd-shim-%s", r.ID))
+		if err = os.MkdirAll(sockDir, 0700); err != nil {
+			return nil, errors.Wrap(err, "failed to create temp directory for runc console socket")
+		}
+		defer os.RemoveAll(sockDir)
+
+		if socket, err = runc.NewConsoleSocket(filepath.Join(sockDir, "pty.sock")); err != nil {
 			return nil, errors.Wrap(err, "failed to create runc console socket")
 		}
-		defer os.Remove(socket.Path())
+		defer socket.Close()
 	} else {
 		// TODO: get uid/gid
 		if io, err = runc.NewPipeIO(0, 0); err != nil {
