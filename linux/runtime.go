@@ -69,6 +69,8 @@ type Config struct {
 	Runtime string `toml:"runtime,omitempty"`
 	// NoShim calls runc directly from within the pkg
 	NoShim bool `toml:"no_shim,omitempty"`
+	// Debug enables debug level logging
+	Debug bool `toml:"debug,omitempty"`
 }
 
 func New(ic *plugin.InitContext) (interface{}, error) {
@@ -90,6 +92,7 @@ func New(ic *plugin.InitContext) (interface{}, error) {
 		remote:        !cfg.NoShim,
 		shim:          cfg.Shim,
 		runtime:       cfg.Runtime,
+		debug:         cfg.Debug,
 		events:        make(chan *eventsapi.RuntimeEvent, 2048),
 		eventsContext: c,
 		eventsCancel:  cancel,
@@ -120,6 +123,7 @@ type Runtime struct {
 	shim    string
 	runtime string
 	remote  bool
+	debug   bool
 
 	events        chan *eventsapi.RuntimeEvent
 	eventsContext context.Context
@@ -148,7 +152,7 @@ func (r *Runtime) Create(ctx context.Context, id string, opts runtime.CreateOpts
 			bundle.Delete()
 		}
 	}()
-	s, err := bundle.NewShim(ctx, r.shim, r.remote)
+	s, err := bundle.NewShim(ctx, r.shim, r.remote, r.debug)
 	if err != nil {
 		return nil, err
 	}

@@ -57,7 +57,7 @@ type bundle struct {
 }
 
 // NewShim connects to the shim managing the bundle and tasks
-func (b *bundle) NewShim(ctx context.Context, binary string, remote bool) (*client.Client, error) {
+func (b *bundle) NewShim(ctx context.Context, binary string, remote, debug bool) (*client.Client, error) {
 	opt := client.WithStart(binary)
 	if !remote {
 		opt = client.WithLocal
@@ -66,6 +66,7 @@ func (b *bundle) NewShim(ctx context.Context, binary string, remote bool) (*clie
 		Address:   b.shimAddress(),
 		Path:      b.path,
 		Namespace: b.namespace,
+		Debug:     debug,
 	}, opt)
 }
 
