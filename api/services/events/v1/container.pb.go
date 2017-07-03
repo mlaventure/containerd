@@ -37,6 +37,9 @@
 		SnapshotRemove
 		TaskCreate
 		TaskStart
+		TaskPause
+		TaskResume
+		TaskKill
 		TaskDelete
 */
 package events

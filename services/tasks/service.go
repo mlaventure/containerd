@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/boltdb/bolt"
 	eventsapi "github.com/containerd/containerd/api/services/events/v1"
 	api "github.com/containerd/containerd/api/services/tasks/v1"
@@ -301,6 +302,14 @@ func (s *Service) Pause(ctx context.Context, r *api.PauseTaskRequest) (*google_p
 	if err != nil {
 		return nil, err
 	}
+	if err := s.emit(ctx, "/tasks/pause", &eventsapi.TaskPause{
+		ContainerID: r.ContainerID,
+	}); err != nil {
+		log.G(ctx).WithError(err).WithFields(logrus.Fields{
+			"container-id": r.ContainerID,
+			"topic":        "/tasks/pause",
+		}).Error("failed to emit event")
+	}
 	return empty, nil
 }
 
@@ -313,6 +322,14 @@ func (s *Service) Resume(ctx context.Context, r *api.ResumeTaskRequest) (*google
 	if err != nil {
 		return nil, err
 	}
+	if err := s.emit(ctx, "/tasks/resume", &eventsapi.TaskResume{
+		ContainerID: r.ContainerID,
+	}); err != nil {
+		log.G(ctx).WithError(err).WithFields(logrus.Fields{
+			"container-id": r.ContainerID,
+			"topic":        "/tasks/resume",
+		}).Error("failed to emit event")
+	}
 	return empty, nil
 }
 
@@ -322,18 +339,32 @@ func (s *Service) Kill(ctx context.Context, r *api.KillRequest) (*google_protobu
 		return nil, err
 	}
 
+	ev := eventsapi.TaskKill{
+		ContainerID: r.ContainerID,
+	}
+
 	switch v := r.PidOrAll.(type) {
 	case *api.KillRequest_All:
 		if err := t.Kill(ctx, r.Signal, 0, true); err != nil {
 			return nil, err
 		}
+		ev.All = true
 	case *api.KillRequest_Pid:
 		if err := t.Kill(ctx, r.Signal, v.Pid, false); err != nil {
 			return nil, err
 		}
+		ev.Pid = v.Pid
 	default:
 		return nil, fmt.Errorf("invalid option specified; expected pid or all")
 	}
+
+	if err := s.emit(ctx, "/tasks/kill", &ev); err != nil {
+		log.G(ctx).WithError(err).WithFields(logrus.Fields{
+			"container-id": r.ContainerID,
+			"topic":        "/tasks/kill",
+		}).Error("failed to emit event")
+	}
+
 	return empty, nil
 }
 
