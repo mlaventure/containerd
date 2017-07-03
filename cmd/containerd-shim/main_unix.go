@@ -121,6 +121,7 @@ func handleSignals(signals chan os.Signal, server *grpc.Server) error {
 		logrus.WithField("signal", s).Debug("received signal")
 		switch s {
 		case unix.SIGCHLD:
+			logrus.Debugf("containerd-shim: Received SIGCHLD")
 			if err := reaper.Reap(); err != nil {
 				logrus.WithError(err).Error("reap exit status")
 			}

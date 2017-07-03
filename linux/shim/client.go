@@ -65,6 +65,8 @@ func newCommand(binary string, config Config, socket *os.File) *exec.Cmd {
 	}
 	cmd := exec.Command(binary, args...)
 	cmd.Dir = config.Path
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	// make sure the shim can be re-parented to system init
 	// and is cloned in a new mount namespace because the overlay/filesystems
 	// will be mounted by the shim
