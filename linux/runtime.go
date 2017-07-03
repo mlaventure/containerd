@@ -12,6 +12,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/boltdb/bolt"
 	eventsapi "github.com/containerd/containerd/api/services/events/v1"
 	"github.com/containerd/containerd/api/types"
@@ -354,12 +355,15 @@ func (r *Runtime) forward(ctx context.Context, events shim.Shim_StreamClient) {
 	for {
 		e, err := events.Recv()
 		if err != nil {
+			log.G(r.eventsContext).WithError(err).Error("get event from shim failed")
 			if !strings.HasSuffix(err.Error(), "transport is closing") {
 				log.G(r.eventsContext).WithError(err).Error("get event from shim")
 			}
 			return
 		}
+		log.G(r.eventsContext).Debugf("forwarding event %#v", e)
 		r.events <- e
+		log.G(r.eventsContext).Debugf("emitting event %#v", e)
 		if err := r.emit(ctx, "/runtime/"+getTopic(e), e); err != nil {
 			return
 		}
@@ -377,8 +381,10 @@ func getTopic(e *eventsapi.RuntimeEvent) string {
 	case eventsapi.RuntimeEvent_OOM:
 		return "task-oom"
 	case eventsapi.RuntimeEvent_EXIT:
+		logrus.Debugf("RUNTIME: sending exit event %#v", e)
 		return "task-exit"
 	}
+	logrus.Debugf("RUNTIME: unknown event %#v", e)
 	return ""
 }
 

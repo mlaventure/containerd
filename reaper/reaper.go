@@ -5,9 +5,11 @@ package reaper
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 	"sync"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/containerd/containerd/sys"
 	"github.com/pkg/errors"
 )
@@ -20,6 +22,7 @@ func Reap() error {
 		Default.Lock()
 		c, ok := Default.cmds[e.Pid]
 		if !ok {
+			logrus.Debugf("reaper (%d): unknown pid %d", os.Getpid(), e.Pid)
 			Default.unknown[e.Pid] = e.Status
 			Default.Unlock()
 			continue
@@ -30,6 +33,7 @@ func Reap() error {
 			// pipes are closed and finalizers are run on the process
 			c.c.Wait()
 		}
+		logrus.Debugf("reaper (%d): reaped pid %d", os.Getpid(), e.Pid)
 		c.ExitCh <- e.Status
 	}
 	return err

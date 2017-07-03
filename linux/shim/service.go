@@ -8,6 +8,8 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/Sirupsen/logrus"
+
 	"github.com/containerd/console"
 	events "github.com/containerd/containerd/api/services/events/v1"
 	"github.com/containerd/containerd/api/types/task"
@@ -69,6 +71,7 @@ func (s *Service) Create(ctx context.Context, r *shimapi.CreateTaskRequest) (*sh
 	cmd := &reaper.Cmd{
 		ExitCh: make(chan int, 1),
 	}
+	logrus.Debugf("containerd-shim (%d): registering pid %d", os.Getpid(), pid)
 	reaper.Default.Register(pid, cmd)
 	s.events <- &events.RuntimeEvent{
 		Type: events.RuntimeEvent_CREATE,
@@ -193,7 +196,9 @@ func (s *Service) Stream(r *shimapi.StreamEventsRequest, stream shimapi.Shim_Str
 	defer s.eventsMu.Unlock()
 
 	if s.deferredEvent != nil {
+		logrus.Errorf("containerd-shim (%d): trying to send deferred event %#v, deferring it", os.Getpid(), s.deferredEvent)
 		if err := stream.Send(s.deferredEvent); err != nil {
+			logrus.Errorf("containerd-shim (%d): failed to send deferred event %#v, deferring it", os.Getpid(), s.deferredEvent)
 			return err
 		}
 		s.deferredEvent = nil
@@ -203,8 +208,11 @@ func (s *Service) Stream(r *shimapi.StreamEventsRequest, stream shimapi.Shim_Str
 		select {
 		case e := <-s.events:
 			if err := stream.Send(e); err != nil {
+				logrus.Errorf("containerd-shim (%d): failed to send event %#v, deferring it", os.Getpid(), e)
 				s.deferredEvent = e
 				return err
+			} else {
+				logrus.Errorf("containerd-shim (%d): sent event %#v", os.Getpid(), e)
 			}
 		case <-stream.Context().Done():
 			return stream.Context().Err()
@@ -369,10 +377,13 @@ func (s *Service) Update(ctx context.Context, r *shimapi.UpdateTaskRequest) (*go
 }
 
 func (s *Service) waitExit(p process, pid int, cmd *reaper.Cmd) {
+	logrus.Debugf("containerd-shim (%d): waiting for pid %d to exit", os.Getpid(), pid)
 	status := <-cmd.ExitCh
 	p.Exited(status)
+	logrus.Debugf("containerd-shim (%d): pid %d to exited", os.Getpid(), pid)
 
 	reaper.Default.Delete(pid)
+	logrus.Debugf("containerd-shim (%d): sending event for pid %d", os.Getpid(), pid)
 	s.events <- &events.RuntimeEvent{
 		Type:       events.RuntimeEvent_EXIT,
 		ID:         s.id,
@@ -380,6 +391,7 @@ func (s *Service) waitExit(p process, pid int, cmd *reaper.Cmd) {
 		ExitStatus: uint32(status),
 		ExitedAt:   p.ExitedAt(),
 	}
+	logrus.Debugf("containerd-shim (%d): waitExit sent event for pid %d", os.Getpid(), pid)
 }
 
 func (s *Service) getContainerPids(ctx context.Context, id string) ([]uint32, error) {

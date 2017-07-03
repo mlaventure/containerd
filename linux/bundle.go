@@ -66,7 +66,7 @@ func (b *bundle) NewShim(ctx context.Context, binary string, remote, debug bool)
 		Address:   b.shimAddress(),
 		Path:      b.path,
 		Namespace: b.namespace,
-		Debug:     debug,
+		Debug:     true, // debug
 	}, opt)
 }
 
