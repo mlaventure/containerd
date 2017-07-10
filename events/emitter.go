@@ -60,6 +60,7 @@ func (e *Emitter) Remove(clientID string) {
 	if v, ok := e.sinks[clientID]; ok {
 		e.broadcaster.Remove(v)
 		delete(e.sinks, clientID)
+		close(v.ch)
 	}
 	e.m.Unlock()
 }

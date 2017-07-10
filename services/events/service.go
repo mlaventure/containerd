@@ -37,8 +37,9 @@ func (s *Service) Register(server *grpc.Server) error {
 
 func (s *Service) Stream(req *api.StreamEventsRequest, srv api.Events_StreamServer) error {
 	clientID := fmt.Sprintf("%d", time.Now().UnixNano())
+	ch := s.emitter.Events(srv.Context(), clientID)
 	for {
-		e := <-s.emitter.Events(srv.Context(), clientID)
+		e := <-ch
 		// upon the client event timeout this will be nil; ignore
 		if e == nil {
 			return nil
