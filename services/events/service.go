@@ -7,6 +7,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	api "github.com/containerd/containerd/api/services/events/v1"
 	"github.com/containerd/containerd/events"
+	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/plugin"
 	"google.golang.org/grpc"
 )
@@ -37,6 +38,9 @@ func (s *Service) Register(server *grpc.Server) error {
 
 func (s *Service) Stream(req *api.StreamEventsRequest, srv api.Events_StreamServer) error {
 	clientID := fmt.Sprintf("%d", time.Now().UnixNano())
+	if ns, _ := namespaces.Namespace(srv.Context()); ns != "" {
+		clientID = ns + "-" + clientID
+	}
 	ch := s.emitter.Events(srv.Context(), clientID)
 	for {
 		e := <-ch

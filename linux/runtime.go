@@ -104,7 +104,7 @@ func New(ic *plugin.InitContext) (interface{}, error) {
 	}
 	// set the events output for a monitor if it generates events
 	r.monitor.Events(r.events)
-	go r.forwardMonitorEvents(ctx)
+	go r.forwardMonitorEvents(ic.Context)
 	tasks, err := r.restoreTasks(ic.Context)
 	if err != nil {
 		return nil, err

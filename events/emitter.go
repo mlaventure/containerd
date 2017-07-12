@@ -56,11 +56,17 @@ func (e *Emitter) Events(ctx context.Context, clientID string) chan *events.Enve
 }
 
 func (e *Emitter) Remove(clientID string) {
+	var (
+		sink *eventSink
+		ok   bool
+	)
 	e.m.Lock()
-	if v, ok := e.sinks[clientID]; ok {
-		e.broadcaster.Remove(v)
+	if sink, ok = e.sinks[clientID]; ok {
 		delete(e.sinks, clientID)
-		close(v.ch)
 	}
 	e.m.Unlock()
+	if ok {
+		sink.Close()
+		e.broadcaster.Remove(sink)
+	}
 }

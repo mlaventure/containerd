@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -18,11 +19,19 @@ type sinkEvent struct {
 }
 
 type eventSink struct {
+	sync.Mutex
 	ns string
 	ch chan *events.Envelope
 }
 
 func (s *eventSink) Write(evt goevents.Event) error {
+	s.Lock()
+	defer s.Unlock()
+
+	if s.ch == nil {
+		return nil
+	}
+
 	e, ok := evt.(*sinkEvent)
 	if !ok {
 		return errors.New("event is not a sink event")
@@ -55,5 +64,10 @@ func (s *eventSink) Write(evt goevents.Event) error {
 }
 
 func (s *eventSink) Close() error {
+	s.Lock()
+	close(s.ch)
+	s.ch = nil
+	s.Unlock()
+
 	return nil
 }
