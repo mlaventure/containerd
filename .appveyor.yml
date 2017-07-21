@@ -8,37 +8,23 @@ environment:
   GOPATH: C:\gopath
   CGO_ENABLED: 1
 
-cache:
-  - C:\tools\mingw64
-
 before_build:
   - choco install -y mingw
   - choco install codecov
 
 build_script:
-#  - bash.exe -lc "export PATH=/c/tools/mingw64/bin:$PATH ; mingw32-make.exe fmt"
-#  - bash.exe -lc "export PATH=/c/tools/mingw64/bin:$PATH ; mingw32-make.exe vet"
+  - bash.exe -lc "export PATH=/c/tools/mingw64/bin:/c/gopath/src/github.com/containerd/containerd/bin:$PATH ; mingw32-make.exe fmt"
+  - bash.exe -lc "export PATH=/c/tools/mingw64/bin:/c/gopath/src/github.com/containerd/containerd/bin:$PATH ; mingw32-make.exe vet"
   - bash.exe -lc "export PATH=/c/tools/mingw64/bin:$PATH ; mingw32-make.exe build"
   - bash.exe -lc "export PATH=/c/tools/mingw64/bin:$PATH ; mingw32-make.exe binaries"
-  # - GIT_CHECK_EXCLUDE="./vendor" TRAVIS_COMMIT_RANGE="${TRAVIS_COMMIT_RANGE/.../..}" C:\MinGW\bin\mingw32-make.exe dco
-#  - SET PATH=C:\tools\mingw64\bin;%PATH%
-#  - gofmt -s -l . | grep -v vendor[/\\] | grep -v ".pb.go$" | tee /dev/stderr
-#  - find . -path ./vendor -prune -o ! -name timestamp.proto ! -name duration.proto -name '*.proto' -type f -exec grep -Hn -e "^ " {} \; | tee /dev/stderr
-#  - mingw32-make.exe fmt
-#  - mingw32-make.exe vet
-#  - mingw32-make.exe build
-#  - mingw32-make.exe binaries
 
 test_script:
+  # TODO: need an equivalent of TRAVIS_COMMIT_RANGE
+  # - GIT_CHECK_EXCLUDE="./vendor" TRAVIS_COMMIT_RANGE="${TRAVIS_COMMIT_RANGE/.../..}" C:\MinGW\bin\mingw32-make.exe dco
   - bash.exe -lc "export PATH=/c/tools/mingw64/bin:/c/gopath/src/github.com/containerd/containerd/bin:$PATH ; mingw32-make.exe integration"
   - bash.exe -lc "export PATH=/c/tools/mingw64/bin:/c/gopath/src/github.com/containerd/containerd/bin:$PATH ; mingw32-make.exe coverage"
   - bash.exe -lc "export PATH=/c/tools/mingw64/bin:/c/gopath/src/github.com/containerd/containerd/bin:$PATH ; mingw32-make.exe root-coverage"
 
-#  - SET PATH=c:\gopath\src\github.com\containerd\containerd\bin;%PATH%
-#  - mingw32-make.exe coverage
-#  - mingw32-make.exe root-coverage
-#  - mingw32-make.exe integration
-
 on_success:
   # Note that, a Codecov upload token is not required.
-#  - codecov -f coverage.txt
+  - codecov -f coverage.txt

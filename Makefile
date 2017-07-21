@@ -16,9 +16,11 @@ endif
 
 WHALE = "🇩"
 ONI = "👹"
+FIX_PATH = $1
 ifeq ("$(OS)", "Windows_NT")
 	WHALE="+"
 	ONI="-"
+	FIX_PATH = $(subst /,\,$1)
 endif
 GOARCH ?= $(shell go env GOARCH)
 
@@ -89,7 +91,7 @@ vet: binaries ## run go vet
 
 fmt: ## run go fmt
 	@echo "$(WHALE) $@"
-	@test -z "$$(gofmt -s -l . | grep -v vendor/ | grep -v ".pb.go$$" | tee /dev/stderr)" || \
+	@test -z "$$(gofmt -s -l . | grep -Fv $(call FIX_PATH,'vendor/') | grep -v ".pb.go$$" | tee /dev/stderr)" || \
 		(echo "$(ONI) please format Go code with 'gofmt -s -w'" && false)
 	@test -z "$$(find . -path ./vendor -prune -o ! -name timestamp.proto ! -name duration.proto -name '*.proto' -type f -exec grep -Hn -e "^ " {} \; | tee /dev/stderr)" || \
 		(echo "$(ONI) please indent proto files with tabs only" && false)
@@ -98,7 +100,7 @@ fmt: ## run go fmt
 
 lint: ## run go lint
 	@echo "$(WHALE) $@"
-	@test -z "$$(golint ./... | grep -v vendor/ | grep -v ".pb.go:" | tee /dev/stderr)"
+	@test -z "$$(golint ./... | grep -Fv $(call FIX_PATH,'vendor/') | grep -v ".pb.go:" | tee /dev/stderr)"
 
 dco: ## dco check
 	@which git-validation > /dev/null 2>/dev/null || (echo "ERROR: git-validation not found" && false)
@@ -110,11 +112,11 @@ endif
 
 ineffassign: ## run ineffassign
 	@echo "$(WHALE) $@"
-	@test -z "$$(ineffassign . | grep -v vendor/ | grep -v ".pb.go:" | tee /dev/stderr)"
+	@test -z "$$(ineffassign . | grep -Fv $(call FIX_PATH,'vendor/') | grep -v ".pb.go:" | tee /dev/stderr)"
 
 #errcheck: ## run go errcheck
 #	@echo "$(WHALE) $@"
-#	@test -z "$$(errcheck ./... | grep -v vendor/ | grep -v ".pb.go:" | tee /dev/stderr)"
+#	@test -z "$$(errcheck ./... | grep -Fv $(call FIX_PATH,'vendor/') | grep -v ".pb.go:" | tee /dev/stderr)"
 
 build: ## build the go packages
 	@echo "$(WHALE) $@"
