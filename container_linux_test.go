@@ -6,9 +6,6 @@ import (
 	"syscall"
 	"testing"
 
-	// register the typeurl
-	_ "github.com/containerd/containerd/runtime"
-
 	"github.com/containerd/cgroups"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )

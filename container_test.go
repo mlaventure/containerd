@@ -12,6 +12,9 @@ import (
 	"syscall"
 	"testing"
 
+	// Register the typeurl
+	_ "github.com/containerd/containerd/runtime"
+
 	"github.com/containerd/containerd/errdefs"
 )
 

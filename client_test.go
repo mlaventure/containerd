@@ -181,6 +181,11 @@ func TestNewClient(t *testing.T) {
 }
 
 func TestImagePull(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// TODO: remove once Windows has a snapshotter
+		t.Skip("Windows does not have a snapshotter yet")
+	}
+
 	client, err := newClient(t, address)
 	if err != nil {
 		t.Fatal(err)
