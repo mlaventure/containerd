@@ -123,7 +123,7 @@ func TestMain(m *testing.M) {
 			}
 		}
 		if err := cmd.Wait(); err != nil {
-			fmt.Fprintln(os.Stderr, "failed to wait for container", err)
+			fmt.Fprintln(os.Stderr, "failed to wait for containerd", err)
 		}
 		if err := os.RemoveAll(defaultRoot); err != nil {
 			fmt.Fprintln(os.Stderr, "failed to remove test root dir", err)
