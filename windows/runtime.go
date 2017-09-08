@@ -246,31 +246,31 @@ func (r *windowsRuntime) newTask(ctx context.Context, namespace, id string, spec
 	if conf, err = newWindowsContainerConfig(ctx, hcsshimOwner, nsid, spec); err != nil {
 		return nil, err
 	}
-	defer func() {
-		if err != nil {
-			removeLayer(ctx, conf.LayerFolderPath)
-		}
-	}()
+	// defer func() {
+	// 	if err != nil {
+	// 		removeLayer(ctx, conf.LayerFolderPath)
+	// 	}
+	// }()
 
-	// TODO: remove this once we have a windows snapshotter
-	// Store the LayerFolder in the db so we can clean it if we die
-	if err = r.db.Update(func(tx *bolt.Tx) error {
-		s := newLayerFolderStore(tx)
-		return s.Create(nsid, conf.LayerFolderPath)
-	}); err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err != nil {
-			if dbErr := r.db.Update(func(tx *bolt.Tx) error {
-				s := newLayerFolderStore(tx)
-				return s.Delete(nsid)
-			}); dbErr != nil {
-				log.G(ctx).WithField("id", id).
-					Error("failed to remove key from metadata")
-			}
-		}
-	}()
+	// // TODO: remove this once we have a windows snapshotter
+	// // Store the LayerFolder in the db so we can clean it if we die
+	// if err = r.db.Update(func(tx *bolt.Tx) error {
+	// 	s := newLayerFolderStore(tx)
+	// 	return s.Create(nsid, conf.LayerFolderPath)
+	// }); err != nil {
+	// 	return nil, err
+	// }
+	// defer func() {
+	// 	if err != nil {
+	// 		if dbErr := r.db.Update(func(tx *bolt.Tx) error {
+	// 			s := newLayerFolderStore(tx)
+	// 			return s.Delete(nsid)
+	// 		}); dbErr != nil {
+	// 			log.G(ctx).WithField("id", id).
+	// 				Error("failed to remove key from metadata")
+	// 		}
+	// 	}
+	// }()
 
 	ctr, err := hcsshim.CreateContainer(nsid, conf)
 	if err != nil {
@@ -354,29 +354,28 @@ func (r *windowsRuntime) cleanup(ctx context.Context) {
 		}
 		container.Close()
 
-		// TODO: remove this once we have a windows snapshotter
-		var layerFolderPath string
-		if err := r.db.View(func(tx *bolt.Tx) error {
-			s := newLayerFolderStore(tx)
-			l, e := s.Get(p.ID)
-			if err == nil {
-				layerFolderPath = l
-			}
-			return e
-		}); err == nil && layerFolderPath != "" {
-			removeLayer(ctx, layerFolderPath)
-			if dbErr := r.db.Update(func(tx *bolt.Tx) error {
-				s := newLayerFolderStore(tx)
-				return s.Delete(p.ID)
-			}); dbErr != nil {
-				log.G(ctx).WithField("id", p.ID).
-					Error("failed to remove key from metadata")
-			}
-		} else {
-			log.G(ctx).WithField("id", p.ID).
-				Debug("key not found in metadata, R/W layer may be leaked")
-		}
-
+		// // TODO: remove this once we have a windows snapshotter
+		// var layerFolderPath string
+		// if err := r.db.View(func(tx *bolt.Tx) error {
+		// 	s := newLayerFolderStore(tx)
+		// 	l, e := s.Get(p.ID)
+		// 	if err == nil {
+		// 		layerFolderPath = l
+		// 	}
+		// 	return e
+		// }); err == nil && layerFolderPath != "" {
+		// 	removeLayer(ctx, layerFolderPath)
+		// 	if dbErr := r.db.Update(func(tx *bolt.Tx) error {
+		// 		s := newLayerFolderStore(tx)
+		// 		return s.Delete(p.ID)
+		// 	}); dbErr != nil {
+		// 		log.G(ctx).WithField("id", p.ID).
+		// 			Error("failed to remove key from metadata")
+		// 	}
+		// } else {
+		// 	log.G(ctx).WithField("id", p.ID).
+		// 		Debug("key not found in metadata, R/W layer may be leaked")
+		// }
 	}
 }
 

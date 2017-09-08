@@ -383,6 +383,6 @@ func (t *task) cleanup() {
 	for _, p := range t.processes {
 		t.removeProcessNL(p.id)
 	}
-	removeLayer(context.Background(), t.rwLayer)
+	// removeLayer(context.Background(), t.rwLayer)
 	t.Unlock()
 }
