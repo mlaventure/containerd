@@ -11,8 +11,8 @@ import (
 )
 
 var atter = syscall.SysProcAttr{
-	Cloneflags: syscall.CLONE_NEWNS,
-	Setpgid:    true,
+	// Cloneflags: syscall.CLONE_NEWNS,
+	Setpgid: true,
 }
 
 func setCgroup(cgroupPath string, cmd *exec.Cmd) error {
